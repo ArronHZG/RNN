@@ -13,11 +13,12 @@ class Hp:
     output_size = 1
     cell_size = 20
     learning_rate = 0.001
-    layer_num=1
+    layer_num=5
     ckpt_dir=os.path.basename(sys.argv[0]).split(".")[0]+"/ckpt/"
     log_dir=os.path.basename(sys.argv[0]).split(".")[0]+"/logs/"
+    min_cost_dir=os.path.basename(sys.argv[0]).split(".")[0]+"/"
 #定义读取excel行数
-NROWS=1938
+NROWS=1600
 #读取数据
 def prepareData():
     df = pd.read_excel("./gbtc.xlsx",
@@ -31,7 +32,7 @@ def prepareData():
 
 
     df=df.sort_values("时间")#按照时间戳升序排序
-    seq=np.array(df.values,dtype="float32")#获得所有列并转为array
+    seq=np.array(df.values)#获得所有列并转为array
     seq=np.delete(seq,6,axis=1)#删除百分比变化(change_rate)
     seq=np.delete(seq,6,axis=1)#删除时间
     result=np.array(df["百分比变化(change_rate)"]).reshape([-1,1])
@@ -121,7 +122,7 @@ class LSTMRNN():
         bs_out = self._bias_variable([self.output_size, ])
         # shape = (batch * steps, output_size)
         with tf.name_scope('Wx_plus_b'):
-            self.pred = tf.nn.relu(tf.matmul(l_out_x, Ws_out) + bs_out)
+            self.pred = tf.matmul(l_out_x, Ws_out) + bs_out
 
     def compute_cost(self):
         losses = tf.contrib.legacy_seq2seq.sequence_loss_by_example(
@@ -155,7 +156,17 @@ if __name__ == '__main__':
     standardized_seq, standardized_result, standardized_xs = prepareData()
     model = LSTMRNN()
     saver = tf.train.Saver(max_to_keep=1)
-    min_cost = 10000000
+    # noinspection PyBroadException
+    try:
+        with open(Hp.min_cost_dir+"mincost.txt", "r") as f:
+            min_cost = float(f.read())
+    except:
+        if not os.path.exists(Hp.min_cost_dir):
+            os.mkdir(Hp.min_cost_dir)
+        with open(Hp.min_cost_dir + "mincost.txt", "w") as f:
+            f.write("1000000")
+            min_cost = 1000000
+    print(f"min_cost:{min_cost}")
 
     with tf.Session() as sess:
         try:
@@ -172,7 +183,8 @@ if __name__ == '__main__':
         plt.ion()
         plt.show()
         state = None
-        for i in range(20000):
+        showFlag=0
+        for i in range(200000):
             seq, res, xs = get_batch(standardized_seq, standardized_result, standardized_xs)
             # print(f"xs.shape{xs.shape}")
             if i == 0:
@@ -193,16 +205,21 @@ if __name__ == '__main__':
                 feed_dict=feed_dict)
 
             # plotting
-            plt.plot(xs[0, :], res[0].flatten(), 'r', xs[0, :], pred.flatten()[:Hp.time_steps], 'b--')
-            plt.ylim((-1.2, 1.2))
-            plt.draw()
-            plt.pause(0.3)
+            if showFlag==1:
+                plt.plot(xs[0, :], res[0].flatten(), 'r', xs[0, :], pred.flatten()[:Hp.time_steps], 'b--')
+                plt.ylim((-1.2, 1.2))
+                plt.draw()
+                plt.pause(0.3)
 
-            if i % 20 == 0:
+            if i % 200 == 0:
                 print(f'i:{i}    cost: ', round(cost, 4))
                 result = sess.run(merged, feed_dict)
                 writer.add_summary(result, i)
-                plt.clf()#清屏
+                plt.clf()  # 清屏
             if cost < min_cost:
-                min_cost = cost
+                print(f"cost{cost} min_cost{min_cost}")
+                with open(Hp.min_cost_dir+ "mincost.txt", "w") as f:
+                    f.write(str(cost))
+                min_cost=cost
                 saver.save(sess,Hp.ckpt_dir, global_step=i + 1)
+                showFlag=1

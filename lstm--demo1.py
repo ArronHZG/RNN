@@ -70,7 +70,7 @@ def get_batch(standardized_seq,standardized_result,standardized_xs):
     # batch_result.shape: (50, 20, 1)
     # batch_xs.shape: (50, 20)
 
-class LSTMRNN():
+class LSTMRNN:
     def __init__(self, Hp=Hp):
         self.n_steps = Hp.time_steps
         self.input_size = Hp.input_size
@@ -91,6 +91,7 @@ class LSTMRNN():
             self.compute_cost()
         with tf.name_scope('train'):
             self.train_op = tf.train.AdamOptimizer(self.learning_rate).minimize(self.cost)
+
 
     def add_input_layer(self):
 
@@ -125,7 +126,7 @@ class LSTMRNN():
         bs_out = self._bias_variable([self.output_size, ])
         # shape = (batch * steps, output_size)
         with tf.name_scope('Wx_plus_b'):
-            self.pred = tf.nn.relu(tf.matmul(l_out_x, Ws_out) + bs_out)
+            self.pred = tf.matmul(l_out_x, Ws_out) + bs_out
 
     def compute_cost(self):
         losses = tf.contrib.legacy_seq2seq.sequence_loss_by_example(
@@ -159,6 +160,7 @@ if __name__ == '__main__':
     standardized_seq, standardized_result, standardized_xs = prepareData()
     model = LSTMRNN()
     saver = tf.train.Saver(max_to_keep=1)
+    # noinspection PyBroadException
     try:
         with open(Hp.min_cost_dir+"mincost.txt", "r") as f:
             min_cost = float(f.read())
@@ -184,6 +186,7 @@ if __name__ == '__main__':
         plt.ion()
         plt.show()
         state = None
+        showFlag=0
         for i in range(200000):
             seq, res, xs = get_batch(standardized_seq, standardized_result, standardized_xs)
             # print(f"xs.shape{xs.shape}")
@@ -205,19 +208,21 @@ if __name__ == '__main__':
                 feed_dict=feed_dict)
 
             # plotting
-            plt.plot(xs[0, :], res[0].flatten(), 'r', xs[0, :], pred.flatten()[:Hp.time_steps], 'b--')
-            # plt.ylim((-1.2, 1.2))
-            plt.draw()
-            plt.pause(0.3)
-
+            if showFlag==1:
+                plt.plot(xs[0, :], res[0].flatten(), 'r', xs[0, :], pred.flatten()[:Hp.time_steps], 'b--')
+                plt.ylim((-1.2, 1.2))
+                plt.draw()
+                plt.pause(0.3)
 
             if i % 200 == 0:
-                print(f'i:{i}    cost: ', round(cost, 4))
+                print(f'i:{i}    cost: {cost}')
                 result = sess.run(merged, feed_dict)
                 writer.add_summary(result, i)
                 plt.clf()  # 清屏
             if cost < min_cost:
+                print(f"cost{cost} min_cost{min_cost}")
                 with open(Hp.min_cost_dir+ "mincost.txt", "w") as f:
                     f.write(str(cost))
                 min_cost=cost
                 saver.save(sess,Hp.ckpt_dir, global_step=i + 1)
+                showFlag=1
